@@ -154,15 +154,19 @@ async def test_send_chat_action():
 @pytest.mark.asyncio
 async def test_create_group():
     c, m = _mock_client()
-    m.create_group = AsyncMock(return_value="group")
-    assert await c.create_group("T", [1, 2]) == "group"
+    mock_res = MagicMock()
+    mock_res.chats = ["mock_group"]
+    m.return_value = mock_res
+    assert await c.create_group("T", [1, 2]) == "mock_group"
 
 
 @pytest.mark.asyncio
 async def test_create_channel():
     c, m = _mock_client()
-    m.create_channel = AsyncMock(return_value="ch")
-    assert await c.create_channel("T", about="desc") == "ch"
+    mock_res = MagicMock()
+    mock_res.chats = ["mock_ch"]
+    m.return_value = mock_res
+    assert await c.create_channel("T", about="desc") == "mock_ch"
 
 
 @pytest.mark.asyncio
@@ -182,7 +186,9 @@ async def test_leave_chat():
 @pytest.mark.asyncio
 async def test_export_invite_link():
     c, m = _mock_client()
-    m.export_chat_invite_link = AsyncMock(return_value="https://x")
+    mock_res = MagicMock()
+    mock_res.link = "https://x"
+    m.return_value = mock_res
     assert await c.export_chat_invite_link("ch") == "https://x"
 
 
@@ -338,9 +344,12 @@ def test_sync_send_photo():
 
 def test_sync_create_channel():
     c = Client(session_string="x")
-    mock = MagicMock()
+    # Use AsyncMock for the client so it can be awaited, and override sync methods
+    mock = AsyncMock()
     mock.is_connected = MagicMock(return_value=True)
-    mock.create_channel = AsyncMock(return_value="sync-ch")
+    mock_res = MagicMock()
+    mock_res.chats = ["sync-ch"]
+    mock.return_value = mock_res
     c._async._client = mock
     try:
         assert c.create_channel("T") == "sync-ch"

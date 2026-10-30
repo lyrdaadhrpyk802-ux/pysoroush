@@ -1,5 +1,6 @@
 """
 Asynchronous client for the Soroush Plus User Account (Self) API.
+Using the custom embedded PySoroush-Core engine (based on Telethon).
 """
 
 from __future__ import annotations
@@ -10,11 +11,11 @@ from typing import (
     Optional, Any, List, Union, Callable, AsyncIterator, BinaryIO,
 )
 
-from splusthon import SoroushClient, events
-from splusthon.sessions import StringSession
-from splusthon.errors import SessionPasswordNeededError
-
-from splusthon.tl.types import (
+# --- Custom Engine Imports ---
+from ._engine import SoroushClient, events
+from ._engine.sessions import StringSession
+from ._engine.errors import SessionPasswordNeededError
+from ._engine.tl.types import (
     ReactionEmoji, ChatAdminRights, InputMediaPoll, Poll, PollAnswer,
     InputGeoPoint, InputMediaGeoPoint, InputMediaContact,
 )
@@ -35,7 +36,8 @@ class AsyncClient:
         self.session_string = session_string
         self.session_file = session_file
         session = StringSession(session_string) if session_string else session_file
-        self._client: SoroushClient = SoroushClient(session)
+        # Using our custom SoroushClient
+        self._client: SoroushClient = SoroushClient(session, api_id=1030400, api_hash='6edb16cf88714a4e9a805e928c39c937')
 
     # ==================================================================
     # Raw TL API
@@ -69,20 +71,8 @@ class AsyncClient:
                 await self._client.disconnect()
             except Exception:
                 pass
-
-        # Aggressively close any lingering aiohttp session held by SPlusthon
-        try:
-            sender = getattr(self._client, "_sender", None)
-            if sender is not None:
-                connection = getattr(sender, "_connection", None)
-                if connection is not None:
-                    http_session = getattr(connection, "_session", None)
-                    if http_session is not None and not http_session.closed:
-                        await http_session.close()
-        except Exception:
-            pass
-
-        await asyncio.sleep(0.2)
+        # Give the underlying aiohttp session enough time to close its sockets
+        await asyncio.sleep(0.5)
 
     async def is_connected(self) -> bool:
         return self._client.is_connected()
@@ -143,14 +133,13 @@ class AsyncClient:
         return await self._client.get_input_entity(entity)
 
     async def get_peer_id(self, entity: Union[str, int, Any]) -> int:
-        """Get numeric peer ID (async in SPlusthon)."""
         await self.connect()
         return await self._client.get_peer_id(entity)
 
     async def get_full_user(self, entity: Union[str, int, Any]) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.users import GetFullUserRequest
+            from ._engine.tl.functions.users import GetFullUserRequest
             user = await self._client.get_input_entity(entity)
             return await self._client(GetFullUserRequest(id=user))
         except Exception as e:
@@ -159,7 +148,7 @@ class AsyncClient:
     async def get_full_channel(self, entity: Union[str, int, Any]) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.channels import GetFullChannelRequest
+            from ._engine.tl.functions.channels import GetFullChannelRequest
             peer = await self._client.get_input_entity(entity)
             return await self._client(GetFullChannelRequest(channel=peer))
         except Exception as e:
@@ -212,7 +201,7 @@ class AsyncClient:
         try:
             return await self._client.send_file(entity, file, **kwargs)
         except Exception as e:
-            raise SoroushAccountError(f"Failed to send file: {e}")
+            raise SoroushAccountError(f"Failed to send file (Note: Server may restrict this over WebSocket): {e}")
 
     async def send_photo(self, entity: Any, file: Union[str, BinaryIO], caption: Optional[str] = None) -> Any:
         return await self.send_file(entity, file, force_document=False, caption=caption)
@@ -263,7 +252,7 @@ class AsyncClient:
     async def send_reaction(self, entity: Any, message_id: int, emoji: str) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.messages import SendReactionRequest
+            from ._engine.tl.functions.messages import SendReactionRequest
             peer = await self._client.get_input_entity(entity)
             return await self._client(SendReactionRequest(peer=peer, msg_id=message_id, reaction=[ReactionEmoji(emoticon=emoji)]))
         except Exception as e:
@@ -288,7 +277,7 @@ class AsyncClient:
     async def get_messages_views(self, entity: Any, message_ids: List[int], increment: bool = False) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.messages import GetMessagesViewsRequest
+            from ._engine.tl.functions.messages import GetMessagesViewsRequest
             peer = await self._client.get_input_entity(entity)
             return await self._client(GetMessagesViewsRequest(peer=peer, id=message_ids, increment=increment))
         except Exception as e:
@@ -315,7 +304,7 @@ class AsyncClient:
     async def clear_history(self, entity: Any, max_id: int = 0, just_clear: bool = False, revoke: bool = True) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.messages import DeleteHistoryRequest
+            from ._engine.tl.functions.messages import DeleteHistoryRequest
             peer = await self._client.get_input_entity(entity)
             return await self._client(DeleteHistoryRequest(peer=peer, max_id=max_id, just_clear=just_clear, revoke=revoke))
         except Exception as e:
@@ -324,7 +313,7 @@ class AsyncClient:
     async def save_draft(self, entity: Any, text: str) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.messages import SaveDraftRequest
+            from ._engine.tl.functions.messages import SaveDraftRequest
             peer = await self._client.get_input_entity(entity)
             return await self._client(SaveDraftRequest(peer=peer, message=text))
         except Exception as e:
@@ -352,39 +341,23 @@ class AsyncClient:
             raise SoroushAccountError(f"Failed to mark as read: {e}")
 
     async def send_chat_action(self, entity: Any, action: str = "typing") -> Any:
-        """Send a one-shot chat action (e.g. 'typing', 'upload_photo').
-        Uses the raw SetTypingRequest to avoid context-manager semantics."""
         await self.connect()
         try:
-            from splusthon.tl.functions.messages import SetTypingRequest
-            from splusthon.tl.types import (
-                SendMessageTypingAction,
-                SendMessageUploadPhotoAction,
-                SendMessageRecordVideoAction,
-                SendMessageUploadVideoAction,
-                SendMessageRecordAudioAction,
-                SendMessageUploadAudioAction,
-                SendMessageUploadDocumentAction,
-                SendMessageGeoLocationAction,
-                SendMessageChooseContactAction,
-                SendMessageRecordRoundAction,
-                SendMessageUploadRoundAction,
+            from ._engine.tl.functions.messages import SetTypingRequest
+            from ._engine.tl.types import (
+                SendMessageTypingAction, SendMessageUploadPhotoAction, SendMessageRecordVideoAction,
+                SendMessageUploadVideoAction, SendMessageRecordAudioAction, SendMessageUploadAudioAction,
+                SendMessageUploadDocumentAction, SendMessageGeoLocationAction, SendMessageChooseContactAction,
+                SendMessageRecordRoundAction, SendMessageUploadRoundAction,
             )
-
             action_map = {
-                "typing": SendMessageTypingAction,
-                "upload_photo": SendMessageUploadPhotoAction,
-                "record_video": SendMessageRecordVideoAction,
-                "upload_video": SendMessageUploadVideoAction,
-                "record_voice": SendMessageRecordAudioAction,
-                "upload_voice": SendMessageUploadAudioAction,
-                "upload_document": SendMessageUploadDocumentAction,
-                "find_location": SendMessageGeoLocationAction,
-                "choose_contact": SendMessageChooseContactAction,
-                "record_video_note": SendMessageRecordRoundAction,
+                "typing": SendMessageTypingAction, "upload_photo": SendMessageUploadPhotoAction,
+                "record_video": SendMessageRecordVideoAction, "upload_video": SendMessageUploadVideoAction,
+                "record_voice": SendMessageRecordAudioAction, "upload_voice": SendMessageUploadAudioAction,
+                "upload_document": SendMessageUploadDocumentAction, "find_location": SendMessageGeoLocationAction,
+                "choose_contact": SendMessageChooseContactAction, "record_video_note": SendMessageRecordRoundAction,
                 "upload_video_note": SendMessageUploadRoundAction,
             }
-
             action_class = action_map.get(action, SendMessageTypingAction)
             peer = await self._client.get_input_entity(entity)
             return await self._client(SetTypingRequest(peer=peer, action=action_class()))
@@ -395,24 +368,42 @@ class AsyncClient:
     # Chat & Channel Management
     # ==================================================================
 
-    async def create_group(self, title: str, users: List[Any]) -> Any:
+    async def create_channel(self, title: str, about: str = "", megagroup: bool = False) -> Any:
+        """Creates a new channel or supergroup using raw TL requests."""
         await self.connect()
         try:
-            return await self._client.create_group(title, users)
+            from ._engine.tl.functions.channels import CreateChannelRequest
+            result = await self._client(CreateChannelRequest(title=title, about=about, megagroup=megagroup))
+            return result.chats[0]
+        except Exception as e:
+            raise SoroushAccountError(f"Failed to create channel: {e}")
+
+    async def create_group(self, title: str, users: List[Any]) -> Any:
+        """Creates a new basic group chat with the given users."""
+        await self.connect()
+        try:
+            from ._engine.tl.functions.messages import CreateChatRequest
+            user_peers = [await self._client.get_input_entity(u) for u in users]
+            result = await self._client(CreateChatRequest(users=user_peers, title=title))
+            return result.chats[0]
         except Exception as e:
             raise SoroushAccountError(f"Failed to create group: {e}")
 
-    async def create_channel(self, title: str, about: str = "", megagroup: bool = False) -> Any:
+    async def delete_channel(self, entity: Any) -> Any:
+        """Deletes a channel or supergroup you own."""
         await self.connect()
         try:
-            return await self._client.create_channel(title, about=about, megagroup=megagroup)
+            from ._engine.tl.functions.channels import DeleteChannelRequest
+            # Force resolving the entity into an InputChannel with access_hash
+            peer = await self._client.get_input_entity(entity)
+            return await self._client(DeleteChannelRequest(channel=peer))
         except Exception as e:
-            raise SoroushAccountError(f"Failed to create channel: {e}")
+            raise SoroushAccountError(f"Failed to delete channel: {e}")
 
     async def join_chat(self, entity: Any) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.channels import JoinChannelRequest
+            from ._engine.tl.functions.channels import JoinChannelRequest
             return await self._client(JoinChannelRequest(entity))
         except Exception as e:
             raise SoroushAccountError(f"Failed to join chat: {e}")
@@ -420,7 +411,7 @@ class AsyncClient:
     async def join_chat_invite(self, invite_hash: str) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.messages import ImportChatInviteRequest
+            from ._engine.tl.functions.messages import ImportChatInviteRequest
             return await self._client(ImportChatInviteRequest(hash=invite_hash))
         except Exception as e:
             raise SoroushAccountError(f"Failed to join chat by invite: {e}")
@@ -428,7 +419,7 @@ class AsyncClient:
     async def leave_chat(self, entity: Any) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.channels import LeaveChannelRequest
+            from ._engine.tl.functions.channels import LeaveChannelRequest
             return await self._client(LeaveChannelRequest(entity))
         except Exception as e:
             raise SoroushAccountError(f"Failed to leave chat: {e}")
@@ -436,14 +427,17 @@ class AsyncClient:
     async def export_chat_invite_link(self, entity: Any) -> str:
         await self.connect()
         try:
-            return await self._client.export_chat_invite_link(entity)
+            from ._engine.tl.functions.messages import ExportChatInviteRequest
+            peer = await self._client.get_input_entity(entity)
+            result = await self._client(ExportChatInviteRequest(peer=peer))
+            return result.link
         except Exception as e:
             raise SoroushAccountError(f"Failed to export invite link: {e}")
 
     async def add_chat_user(self, chat: Any, user: Any, forward_limit: int = 100) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.messages import AddChatUserRequest
+            from ._engine.tl.functions.messages import AddChatUserRequest
             chat_peer = await self._client.get_input_entity(chat)
             user_peer = await self._client.get_input_entity(user)
             return await self._client(AddChatUserRequest(chat_id=chat_peer, user_id=user_peer, fwd_limit=forward_limit))
@@ -453,7 +447,7 @@ class AsyncClient:
     async def invite_to_channel(self, channel: Any, users: List[Any]) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.channels import InviteToChannelRequest
+            from ._engine.tl.functions.channels import InviteToChannelRequest
             channel_peer = await self._client.get_input_entity(channel)
             user_peers = [await self._client.get_input_entity(u) for u in users]
             return await self._client(InviteToChannelRequest(channel=channel_peer, users=user_peers))
@@ -464,11 +458,11 @@ class AsyncClient:
         await self.connect()
         try:
             try:
-                from splusthon.tl.functions.stats import GetBroadcastStatsRequest
+                from ._engine.tl.functions.stats import GetBroadcastStatsRequest
                 channel = await self._client.get_input_entity(entity)
                 return await self._client(GetBroadcastStatsRequest(channel=channel, dark=dark))
             except ImportError:
-                return {"error": "GetBroadcastStatsRequest not supported"}
+                return {"error": "GetBroadcastStatsRequest not supported in this engine version"}
         except Exception as e:
             raise SoroushAccountError(f"Failed to get stats: {e}")
 
@@ -479,7 +473,7 @@ class AsyncClient:
     async def get_folders(self) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.messages import GetDialogFiltersRequest
+            from ._engine.tl.functions.messages import GetDialogFiltersRequest
             return await self._client(GetDialogFiltersRequest())
         except Exception as e:
             raise SoroushAccountError(f"Failed to get folders: {e}")
@@ -487,8 +481,8 @@ class AsyncClient:
     async def edit_folder(self, folder_id: int, title: str, **kwargs) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.messages import UpdateDialogFilterRequest
-            from splusthon.tl.types import DialogFilter
+            from ._engine.tl.functions.messages import UpdateDialogFilterRequest
+            from ._engine.tl.types import DialogFilter
             pinned = kwargs.pop("pinned_peers", [])
             include = kwargs.pop("include_peers", [])
             exclude = kwargs.pop("exclude_peers", [])
@@ -500,8 +494,8 @@ class AsyncClient:
     async def pin_dialog(self, entity: Any, pin: bool = True) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.messages import ToggleDialogPinRequest
-            from splusthon.tl.types import InputDialogPeer
+            from ._engine.tl.functions.messages import ToggleDialogPinRequest
+            from ._engine.tl.types import InputDialogPeer
             peer = await self._client.get_input_entity(entity)
             return await self._client(ToggleDialogPinRequest(peer=InputDialogPeer(peer=peer), pinned=pin))
         except Exception as e:
@@ -513,8 +507,8 @@ class AsyncClient:
     async def mute_chat(self, entity: Any, mute_until: Optional[datetime] = None) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.account import UpdateNotifySettingsRequest
-            from splusthon.tl.types import InputNotifyPeer, InputPeerNotifySettings
+            from ._engine.tl.functions.account import UpdateNotifySettingsRequest
+            from ._engine.tl.types import InputNotifyPeer, InputPeerNotifySettings
             peer = await self._client.get_input_entity(entity)
             if mute_until is None:
                 mute_until = datetime(2038, 1, 1)
@@ -526,8 +520,8 @@ class AsyncClient:
     async def unmute_chat(self, entity: Any) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.account import UpdateNotifySettingsRequest
-            from splusthon.tl.types import InputNotifyPeer, InputPeerNotifySettings
+            from ._engine.tl.functions.account import UpdateNotifySettingsRequest
+            from ._engine.tl.types import InputNotifyPeer, InputPeerNotifySettings
             peer = await self._client.get_input_entity(entity)
             settings = InputPeerNotifySettings(show_previews=True, silent=False, mute_until=0)
             return await self._client(UpdateNotifySettingsRequest(peer=InputNotifyPeer(peer=peer), settings=settings))
@@ -537,8 +531,8 @@ class AsyncClient:
     async def archive_chat(self, entity: Any) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.folders import EditPeerFoldersRequest
-            from splusthon.tl.types import InputFolderPeer
+            from ._engine.tl.functions.folders import EditPeerFoldersRequest
+            from ._engine.tl.types import InputFolderPeer
             peer = await self._client.get_input_entity(entity)
             return await self._client(EditPeerFoldersRequest(folder_peers=[InputFolderPeer(peer=peer, folder_id=1)]))
         except Exception as e:
@@ -547,8 +541,8 @@ class AsyncClient:
     async def unarchive_chat(self, entity: Any) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.folders import EditPeerFoldersRequest
-            from splusthon.tl.types import InputFolderPeer
+            from ._engine.tl.functions.folders import EditPeerFoldersRequest
+            from ._engine.tl.types import InputFolderPeer
             peer = await self._client.get_input_entity(entity)
             return await self._client(EditPeerFoldersRequest(folder_peers=[InputFolderPeer(peer=peer, folder_id=0)]))
         except Exception as e:
@@ -568,7 +562,7 @@ class AsyncClient:
     async def edit_admin(self, entity: Any, user: Any, **kwargs) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.channels import EditAdminRequest
+            from ._engine.tl.functions.channels import EditAdminRequest
             rights = ChatAdminRights(**kwargs)
             peer = await self._client.get_input_entity(entity)
             user_peer = await self._client.get_input_entity(user)
@@ -579,7 +573,7 @@ class AsyncClient:
     async def block_user(self, user: Any) -> bool:
         await self.connect()
         try:
-            from splusthon.tl.functions.contacts import BlockRequest
+            from ._engine.tl.functions.contacts import BlockRequest
             peer = await self._client.get_input_entity(user)
             await self._client(BlockRequest(id=peer))
             return True
@@ -589,7 +583,7 @@ class AsyncClient:
     async def unblock_user(self, user: Any) -> bool:
         await self.connect()
         try:
-            from splusthon.tl.functions.contacts import UnblockRequest
+            from ._engine.tl.functions.contacts import UnblockRequest
             peer = await self._client.get_input_entity(user)
             await self._client(UnblockRequest(id=peer))
             return True
@@ -603,7 +597,7 @@ class AsyncClient:
     async def update_profile(self, first_name: Optional[str] = None, last_name: Optional[str] = None, about: Optional[str] = None) -> bool:
         await self.connect()
         try:
-            from splusthon.tl.functions.account import UpdateProfileRequest
+            from ._engine.tl.functions.account import UpdateProfileRequest
             await self._client(UpdateProfileRequest(first_name=first_name, last_name=last_name, about=about))
             return True
         except Exception as e:
@@ -612,7 +606,7 @@ class AsyncClient:
     async def update_username(self, username: str) -> bool:
         await self.connect()
         try:
-            from splusthon.tl.functions.account import UpdateUsernameRequest
+            from ._engine.tl.functions.account import UpdateUsernameRequest
             await self._client(UpdateUsernameRequest(username=username))
             return True
         except Exception as e:
@@ -621,7 +615,7 @@ class AsyncClient:
     async def set_profile_photo(self, file: Union[str, BinaryIO]) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.photos import UploadProfilePhotoRequest
+            from ._engine.tl.functions.photos import UploadProfilePhotoRequest
             uploaded = await self._client.upload_file(file)
             return await self._client(UploadProfilePhotoRequest(file=uploaded))
         except Exception as e:
@@ -630,7 +624,7 @@ class AsyncClient:
     async def delete_profile_photos(self, photos: List[Any]) -> Any:
         await self.connect()
         try:
-            from splusthon.tl.functions.photos import DeletePhotosRequest
+            from ._engine.tl.functions.photos import DeletePhotosRequest
             return await self._client(DeletePhotosRequest(id=photos))
         except Exception as e:
             raise SoroushAccountError(f"Failed to delete profile photos: {e}")

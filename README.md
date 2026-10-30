@@ -1,6 +1,6 @@
 # PySoroush
 
-A modern, simple, and powerful Python library for the Soroush Plus messenger.
+A modern, simple, and powerful Python library for the **Soroush Plus** messenger.
 
 Designed with an intuitive API so that even beginners can build bots and user-automation scripts with just a few lines of code.
 
@@ -13,39 +13,46 @@ Designed with an intuitive API so that even beginners can build bots and user-au
 ## Features
 
 ### Bot API (Synchronous & Asynchronous)
-- Full support for the official Soroush Plus Bot API
-- Both Sync (requests) and Async (aiohttp) clients
-- Auto-Retry with exponential backoff on network failures
-- Rate Limit handling (automatic sleeping when hitting 429)
-- Fluent Keyboard Builder for building complex keyboards easily
-- Filters for routing messages (Text, Photo, Private, StateFilter, etc.)
-- FSM (Finite State Machine) for multi-step conversations
-- Media support (photos, videos, documents, audio, media groups)
-- WebApp data validation (HMAC-SHA-256)
+- Full support for the official Soroush Plus Bot API.
+- Both **Sync** (`requests`) and **Async** (`aiohttp`) clients.
+- **Auto-Retry** with exponential backoff on network failures.
+- **Rate Limit** handling (automatic sleeping when hitting 429).
+- **Fluent Keyboard Builder** for building complex keyboards easily.
+- **Filters** for routing messages (`Text`, `Photo`, `Private`, `StateFilter`, etc.).
+- **FSM (Finite State Machine)** for multi-step conversations.
+- **Media** support (photos, videos, documents, audio, media groups).
+- **WebApp** data validation (HMAC-SHA-256).
 
-### Account API (Self / Userbot)
-- Login with phone number + OTP
-- Two-Step Verification support
-- Send and receive messages as your own user
-- Send media (photos, files, etc.)
-- Read message history, edit, delete, forward
-- Download media
-- Get dialogs and participants
-- Event handlers (on_message, on_callback, on_edited_message, etc.)
-- Raw TL API access for advanced use cases
-- Sync and Async interfaces
+### Account API (Self / Userbot) - 100% Independent Engine
+Powered by an **embedded custom MTProto engine**, written from scratch for this project. 
+There are **no third-party Soroush wrappers** required. It's fully independent and optimized for Soroush Plus.
+
+- Login with phone number + OTP (Two-Step Verification supported).
+- Send and receive text messages, polls, locations, and contacts.
+- Read history, edit, delete, forward, and react to messages.
+- Group and channel management (create, leave, archive, mute, block).
+- Folder management (create, edit, delete).
+- Raw TL API access for advanced use cases.
+- 9 Event handlers (`on_message`, `on_callback`, `on_edited_message`, etc.).
+- Sync and Async interfaces.
+
+> **Note on Server Limitations**: Due to Soroush Plus's server restrictions over WebSockets, certain features like **uploading files** (photos/documents), **clearing chat history**, and **exporting invite links** are not supported by the server. The library handles these gracefully.
 
 ---
 
 ## Installation
 
+```bash
 pip install pysoroush
+```
+
 ---
 
 Quick Start
 
 1. Bot API (Simple Polling)
 
+```python
 from pysoroush.bot import Bot
 
 bot = Bot("YOUR_BOT_TOKEN")
@@ -60,46 +67,11 @@ def echo_handler(msg):
     return True
 
 bot.run()  # Start polling
-2. Bot API with Inline Keyboards
+```
 
-from pysoroush.bot import Bot
-from pysoroush.bot.types import InlineKeyboardMarkup, InlineKeyboardButton
+2. Account API (Userbot)
 
-bot = Bot("YOUR_BOT_TOKEN")
-
-@bot.command("menu")
-def menu_handler(msg):
-    kb = InlineKeyboardMarkup().row(
-        InlineKeyboardButton(text="Option 1", callback_data="opt1"),
-        InlineKeyboardButton(text="Open Website", url="https://splus.ir")
-    )
-    bot.reply(msg, "Choose an option:", reply_markup=kb)
-    return True
-
-@bot.on_callback()
-def handle_callback(callback):
-    bot.answer_callback_query(callback.id, text=f"You clicked: {callback.data}")
-    return True
-
-bot.run()
-3. Async Bot
-
-import asyncio
-from pysoroush.bot import AsyncBot
-
-bot = AsyncBot("YOUR_BOT_TOKEN")
-
-@bot.command("start")
-async def start_handler(msg):
-    await bot.reply(msg, "Hello async world!")
-    return True
-
-async def main():
-    await bot.run()
-
-asyncio.run(main())
-4. Account API (Userbot)
-
+```python
 import asyncio
 from pysoroush.account import AsyncClient
 
@@ -113,16 +85,20 @@ async def main():
         me = await client.get_me()
         print(f"Logged in as {me.first_name}")
 
+        # Send a message to yourself
         await client.send_message("me", "Hello from my own account!")
-        await client.send_photo("me", "/path/to/photo.jpg", caption="Check this out!")
 
+        # List dialogs
         dialogs = await client.get_dialogs(limit=10)
         for dialog in dialogs:
             print(f"- {dialog.name}")
 
 asyncio.run(main())
-5. Account API with Event Handlers
+```
 
+3. Account API with Event Handlers
+
+```python
 import asyncio
 from pysoroush.account import AsyncClient
 
@@ -141,20 +117,14 @@ async def main():
         await client.run_until_disconnected()
 
 asyncio.run(main())
+```
+
 ---
 
 Security Notes
 
 · Never commit your *.session files to GitHub. These files contain your authentication tokens.
-· Use environment variables to store bot tokens in production.
 · The Account API is based on the MTProto protocol and is provided for automation purposes only. Please respect Soroush Plus's Terms of Service.
-
----
-
-Contributing
-
-Contributions, issues, and feature requests are welcome!
-Feel free to check the issues page.
 
 ---
 
@@ -170,4 +140,7 @@ Author
 Ali VEX
 
 · GitHub: @lyrdaadhrpyk802-ux
-· Email: lyrdaadhrpyk802@gmail.com
+  PYEOF
+  echo "Updated: README.md with new 0.2.0 independent features."
+
+```

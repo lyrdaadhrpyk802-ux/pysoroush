@@ -1,0 +1,21 @@
+# Include only what is needed for the package
+include README.md
+include LICENSE
+include pyproject.toml
+
+# Include only the package's Python files
+recursive-include pysoroush *.py
+
+# Explicitly exclude anything sensitive or unnecessary
+global-exclude *.py[cod]
+global-exclude __pycache__
+global-exclude *.session
+global-exclude *.session-journal
+global-exclude *.log
+global-exclude *.db
+global-exclude *.sqlite
+global-exclude .env
+global-exclude *.pem
+global-exclude *.key
+global-exclude example*.py
+global-exclude test_*.py

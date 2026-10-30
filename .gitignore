@@ -1,0 +1,37 @@
+# === SESSION FILES (NEVER COMMIT!) ===
+*.session
+*.session-journal
+my_account*
+
+# === Python build artifacts ===
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# === Test caches ===
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# === Virtual environments ===
+.venv/
+venv/
+env/
+
+# === IDE / OS ===
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# === Personal test scripts ===
+test_real_*.py
+my_test_*.py
+example_account_backup*.py

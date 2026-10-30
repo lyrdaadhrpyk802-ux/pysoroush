@@ -15,7 +15,7 @@ Example usage for accounts::
     from pysoroush.account import AsyncClient
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __author__ = "Ali VEX"
 __author_email__ = "lyrdaadhrpyk802@gmail.com"
 __url__ = "https://github.com/lyrdaadhrpyk802-ux/pysoroush"

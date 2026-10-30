@@ -65,8 +65,24 @@ class AsyncClient:
 
     async def disconnect(self) -> None:
         if self._client.is_connected():
-            await self._client.disconnect()
-        await asyncio.sleep(0.1)
+            try:
+                await self._client.disconnect()
+            except Exception:
+                pass
+
+        # Aggressively close any lingering aiohttp session held by SPlusthon
+        try:
+            sender = getattr(self._client, "_sender", None)
+            if sender is not None:
+                connection = getattr(sender, "_connection", None)
+                if connection is not None:
+                    http_session = getattr(connection, "_session", None)
+                    if http_session is not None and not http_session.closed:
+                        await http_session.close()
+        except Exception:
+            pass
+
+        await asyncio.sleep(0.2)
 
     async def is_connected(self) -> bool:
         return self._client.is_connected()

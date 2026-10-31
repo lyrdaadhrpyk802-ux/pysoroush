@@ -65,7 +65,7 @@ class UserMethods:
                     request[i] = functions.InvokeWithoutUpdatesRequest(r)
                 else:
                     # This should only run once as requests should be a list of 1 item
-                    request = functions.InvokeWithoutUpdatesRequest(r)
+                    request = r  # Patched
 
         request_index = 0
         last_error = None

@@ -602,7 +602,7 @@ class SoroushBaseClient(abc.ABC):
 
         req = self._init_request
         if self._no_updates:
-            req = functions.InvokeWithoutUpdatesRequest(req)
+            req = req  # Patched
 
         try:
             await self._sender.send(functions.InvokeWithLayerRequest(LAYER, req))

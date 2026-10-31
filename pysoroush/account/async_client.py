@@ -32,12 +32,19 @@ class AsyncClient:
         self,
         session_string: Optional[str] = None,
         session_file: str = "pysoroush_account",
+        receive_updates: bool = True,
     ) -> None:
         self.session_string = session_string
         self.session_file = session_file
+        self.receive_updates = receive_updates
         session = StringSession(session_string) if session_string else session_file
         # Using our custom SoroushClient
-        self._client: SoroushClient = SoroushClient(session, api_id=1030400, api_hash='6edb16cf88714a4e9a805e928c39c937')
+        self._client: SoroushClient = SoroushClient(
+            session,
+            api_id=1030400,
+            api_hash='6edb16cf88714a4e9a805e928c39c937',
+            receive_updates=receive_updates
+        )
 
     # ==================================================================
     # Raw TL API

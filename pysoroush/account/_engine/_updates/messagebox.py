@@ -767,12 +767,12 @@ class MessageBox:
         self.possible_gaps.pop(entry, None)
 
         if isinstance(diff, tl.updates.ChannelDifferenceEmpty):
-            assert diff.final
+            if not diff.final: return [], [], []  # Patched
             self.end_get_diff(entry)
             self.map[entry].pts = diff.pts
             return [], [], []
         elif isinstance(diff, tl.updates.ChannelDifferenceTooLong):
-            assert diff.final
+            if not diff.final: return [], [], []  # Patched
             self.map[entry].pts = diff.dialog.pts
             chat_hashes.extend(diff.users, diff.chats)
             self.reset_channel_deadline(entry, diff.timeout)
